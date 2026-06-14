@@ -1,0 +1,73 @@
+.app-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid #e8e8e8;
+  margin-bottom: 12px;
+}
+
+.header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.app-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.header-subtitle {
+  font-size: 13px;
+  color: #999;
+}
+
+.header-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.order-quick-view {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.quick-view-label {
+  font-size: 13px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.quick-view-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.main-tabs .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+.main-tabs .ant-tabs-tab {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.main-tabs .ant-tabs-content-holder {
+  min-height: 400px;
+}
