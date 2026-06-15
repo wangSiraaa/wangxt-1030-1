@@ -43,6 +43,7 @@ function SalesOrderPanel() {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [confirmOrderId, setConfirmOrderId] = useState('');
   const [confirmCount, setConfirmCount] = useState<number>(0);
+  const [confirmAllergyNotes, setConfirmAllergyNotes] = useState('');
   const [extendModalOpen, setExtendModalOpen] = useState(false);
   const [extendOrderId, setExtendOrderId] = useState('');
   const [extendReason, setExtendReason] = useState('');
@@ -156,7 +157,15 @@ function SalesOrderPanel() {
     { title: '操作', key: 'action', width: 280, render: (_: unknown, r: SalesOrder) => (
       <Space size={4} wrap>
         <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>编辑</Button>
-        {!r.headcountConfirmed && <Button size="small" type="primary" onClick={() => { setConfirmOrderId(r.id); setConfirmCount(r.headcount || 0); setConfirmModalOpen(true); }}>确认人数</Button>}
+        {!r.headcountConfirmed && <Button size="small" type="primary" onClick={() => {
+          setConfirmOrderId(r.id);
+          setConfirmCount(r.headcount || 0);
+          setConfirmAllergyNotes(r.allergyNotes || '');
+          setConfirmModalOpen(true);
+          if (r.hasSpecialDiet && !r.allergyNotes.trim()) {
+            message.warning('该订单含特殊餐标，请同时补填过敏备注');
+          }
+        }}>确认人数</Button>}
         {r.status === 'confirmed' && <Tag color="blue">可排单</Tag>}
         {!['completed', 'cancelled'].includes(r.status) && r.status !== 'extended' && (
           <Button size="small" onClick={() => { setExtendOrderId(r.id); setExtendReason(''); setExtendModalOpen(true); }}>延期</Button>
@@ -229,8 +238,37 @@ function SalesOrderPanel() {
         </Form>
       </Modal>
 
-      <Modal title="确认人数" open={confirmModalOpen} onCancel={() => setConfirmModalOpen(false)} onOk={() => { confirmHeadcount(confirmOrderId, confirmCount); setConfirmModalOpen(false); message.success('人数已确认'); }}>
-        <InputNumber min={1} value={confirmCount} onChange={v => setConfirmCount(v || 0)} style={{ width: '100%' }} addonBefore="确认人数" />
+      <Modal title="确认人数" open={confirmModalOpen} onCancel={() => setConfirmModalOpen(false)}
+        onOk={() => {
+          const order = salesOrders.find(o => o.id === confirmOrderId);
+          if (order?.hasSpecialDiet && !confirmAllergyNotes.trim()) {
+            message.error('该订单含特殊餐标，必须填写过敏备注才能确认人数');
+            return;
+          }
+          confirmHeadcount(confirmOrderId, confirmCount, confirmAllergyNotes);
+          setConfirmModalOpen(false);
+          message.success('人数已确认');
+        }}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <InputNumber min={1} value={confirmCount} onChange={v => setConfirmCount(v || 0)} style={{ width: '100%' }} addonBefore="确认人数" />
+        </div>
+        {(salesOrders.find(o => o.id === confirmOrderId)?.hasSpecialDiet || confirmAllergyNotes.trim()) && (
+          <div>
+            <Input.TextArea
+              rows={3}
+              value={confirmAllergyNotes}
+              onChange={e => setConfirmAllergyNotes(e.target.value)}
+              placeholder={salesOrders.find(o => o.id === confirmOrderId)?.hasSpecialDiet ? "请填写过敏备注（必填）：如花生过敏、无乳糖、清真等" : "过敏备注（可选）"}
+              style={{ width: '100%' }}
+            />
+            {salesOrders.find(o => o.id === confirmOrderId)?.hasSpecialDiet && !confirmAllergyNotes.trim() && (
+              <div style={{ color: '#ff4d4f', fontSize: 12, marginTop: 4 }}>
+                该订单含特殊餐标，过敏备注为必填项
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
 
       <Modal title="会议延期" open={extendModalOpen} onCancel={() => setExtendModalOpen(false)} onOk={() => { extendOrder(extendOrderId, extendReason); setExtendModalOpen(false); message.success('订单已延期'); }}>
@@ -245,21 +283,40 @@ function SalesOrderPanel() {
 }
 
 function BanquetSchedulePanel() {
-  const { salesOrders, teaBreakOrders, createTeaBreakOrder, updateTeaBreakOrder } = useTeaBreakStore();
+  const { salesOrders, teaBreakOrders, createTeaBreakOrder, updateTeaBreakOrder, validateOrderForSchedule } = useTeaBreakStore();
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [form] = Form.useForm();
 
-  const confirmedOrders = salesOrders.filter(o => o.headcountConfirmed && !teaBreakOrders.some(tb => tb.salesOrderId === o.id) && !['cancelled'].includes(o.status));
+  const confirmedOrders = salesOrders.filter(o =>
+    o.headcountConfirmed &&
+    !teaBreakOrders.some(tb => tb.salesOrderId === o.id) &&
+    !['cancelled'].includes(o.status) &&
+    !(o.hasSpecialDiet && !o.allergyNotes.trim())
+  );
+
+  const blockedOrders = salesOrders.filter(o =>
+    o.headcountConfirmed &&
+    !teaBreakOrders.some(tb => tb.salesOrderId === o.id) &&
+    !['cancelled'].includes(o.status) &&
+    o.hasSpecialDiet &&
+    !o.allergyNotes.trim()
+  );
 
   const handleSchedule = () => {
     form.validateFields().then(values => {
+      const issues = validateOrderForSchedule(selectedOrderId);
+      const errors = issues.filter(i => i.severity === 'error');
+      if (errors.length > 0) {
+        message.error(`创建失败：${errors.map(e => e.message).join('；')}`);
+        return;
+      }
       const tb = createTeaBreakOrder(selectedOrderId, values);
       if (tb) {
         message.success('茶歇单已创建');
         setScheduleModalOpen(false);
       } else {
-        message.error('创建失败：人数未确认');
+        message.error('创建失败：订单校验未通过');
       }
     });
   };
@@ -298,6 +355,28 @@ function BanquetSchedulePanel() {
 
       {confirmedOrders.length === 0 && teaBreakOrders.filter(tb => salesOrderMap[tb.salesOrderId]?.status !== 'cancelled').length === 0 && (
         <Alert message="暂无可排单的订单，请先在销售订单中确认人数" type="info" showIcon />
+      )}
+
+      {blockedOrders.length > 0 && (
+        <Alert
+          message={`${blockedOrders.length} 个订单因缺少过敏备注被拦截，不可排单`}
+          description={
+            <Table dataSource={blockedOrders} rowKey="id" size="small" pagination={false}
+              columns={[
+                { title: '订单号', dataIndex: 'orderNo', width: 170 },
+                { title: '会议', dataIndex: 'meetingName', width: 180 },
+                { title: '人数', dataIndex: 'headcount', width: 70 },
+                { title: '问题', key: 'issue', width: 240, render: () => <Tag color="red">含特殊餐标但缺少过敏备注</Tag> },
+                { title: '操作', key: 'action', width: 100, render: (_: unknown, r: SalesOrder) =>
+                  <Button size="small" type="link" onClick={() => message.info(`请在销售订单中为 ${r.orderNo} 补充过敏备注`)}>去补填</Button>
+                },
+              ]}
+            />
+          }
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
       )}
 
       <Table dataSource={teaBreakOrders} columns={tbColumns} rowKey="id" size="small" scroll={{ x: 1300 }} />

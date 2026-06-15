@@ -15,7 +15,7 @@ export const mockMenuItems: MenuItem[] = [
   { id: 'm12', name: '有机果汁', category: '饮品', unitCost: 12, unitPrice: 28, stock: 60, allergens: [], isSpecial: false },
 ];
 
-let _orderCounter = 5;
+let _orderCounter = 6;
 
 export const mockSalesOrders: SalesOrder[] = [
   {
@@ -101,6 +101,33 @@ export const mockSalesOrders: SalesOrder[] = [
     createdBy: '王销售',
     createdAt: '2026-06-12 16:45:00',
     updatedAt: '2026-06-12 16:45:00',
+  },
+  {
+    id: 'o5',
+    orderNo: 'HTB-20260613-005',
+    customerName: '阿里巴巴',
+    contactPhone: '13500135005',
+    meetingName: '回归测试-过敏备注缺失场景',
+    meetingRoom: '会议室C1',
+    meetingDate: '2026-06-17',
+    meetingStartTime: '09:30',
+    meetingEndTime: '11:30',
+    headcount: 30,
+    headcountConfirmed: true,
+    specialRequirements: '有素食和无乳糖需求',
+    hasSpecialDiet: true,
+    allergyNotes: '',
+    status: 'confirmed',
+    menuItems: [
+      { menuItemId: 'm9', quantity: 10 },
+      { menuItemId: 'm10', quantity: 10 },
+      { menuItemId: 'm11', quantity: 5 },
+    ],
+    totalCost: 0,
+    supplementRecords: [],
+    createdBy: '测试员',
+    createdAt: '2026-06-13 08:00:00',
+    updatedAt: '2026-06-13 08:00:00',
   },
   {
     id: 'o4',

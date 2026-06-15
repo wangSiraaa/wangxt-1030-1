@@ -11,7 +11,7 @@ interface TeaBreakStore {
 
   addSalesOrder: (order: Omit<SalesOrder, 'id' | 'orderNo' | 'totalCost' | 'supplementRecords' | 'createdAt' | 'updatedAt'>) => SalesOrder;
   updateSalesOrder: (id: string, updates: Partial<SalesOrder>) => void;
-  confirmHeadcount: (id: string, headcount: number) => void;
+  confirmHeadcount: (id: string, headcount: number, allergyNotes?: string) => void;
   deleteSalesOrder: (id: string) => boolean;
   extendOrder: (id: string, reason: string) => void;
   cancelOrder: (id: string, reason: string) => void;
@@ -29,6 +29,7 @@ interface TeaBreakStore {
 
   calcCostBreakdown: (orderId: string) => CostBreakdown;
   verifyOrders: () => VerificationIssue[];
+  validateOrderForSchedule: (orderId: string) => VerificationIssue[];
   generateDailySettlement: (date: string) => DailySettlement;
 }
 
@@ -81,11 +82,18 @@ export const useTeaBreakStore = create<TeaBreakStore>((set, get) => {
       }));
     },
 
-    confirmHeadcount: (id, headcount) => {
+    confirmHeadcount: (id, headcount, allergyNotes) => {
       set(s => ({
         salesOrders: s.salesOrders.map(o =>
           o.id === id
-            ? recalcOrderCost({ ...o, headcount, headcountConfirmed: true, status: 'confirmed' as OrderStatus, updatedAt: now() }, s.menuItems)
+            ? recalcOrderCost({
+                ...o,
+                headcount,
+                headcountConfirmed: true,
+                allergyNotes: allergyNotes !== undefined ? allergyNotes : o.allergyNotes,
+                status: 'confirmed' as OrderStatus,
+                updatedAt: now()
+              }, s.menuItems)
             : o
         ),
       }));
@@ -121,8 +129,12 @@ export const useTeaBreakStore = create<TeaBreakStore>((set, get) => {
     },
 
     createTeaBreakOrder: (salesOrderId, data) => {
+      const issues = get().validateOrderForSchedule(salesOrderId);
+      const errors = issues.filter(i => i.severity === 'error');
+      if (errors.length > 0) return null;
+
       const order = get().salesOrders.find(o => o.id === salesOrderId);
-      if (!order || !order.headcountConfirmed) return null;
+      if (!order) return null;
 
       const tbOrder: TeaBreakOrder = {
         id: `tb${Date.now()}`,
@@ -362,6 +374,35 @@ export const useTeaBreakStore = create<TeaBreakStore>((set, get) => {
             });
           }
         }
+      }
+
+      return issues;
+    },
+
+    validateOrderForSchedule: (orderId) => {
+      const issues: VerificationIssue[] = [];
+      const order = get().salesOrders.find(o => o.id === orderId);
+      if (!order) return issues;
+      if (order.status === 'cancelled' || order.status === 'completed') return issues;
+
+      if (!order.headcountConfirmed || order.headcount === null) {
+        issues.push({
+          type: 'headcount_unconfirmed',
+          orderId: order.id,
+          orderNo: order.orderNo,
+          message: `订单 ${order.orderNo}（${order.meetingName}）人数未确认，无法生成茶歇单`,
+          severity: 'error',
+        });
+      }
+
+      if (order.hasSpecialDiet && !order.allergyNotes.trim()) {
+        issues.push({
+          type: 'allergy_missing',
+          orderId: order.id,
+          orderNo: order.orderNo,
+          message: `订单 ${order.orderNo}（${order.meetingName}）含特殊餐标但缺少过敏备注，不可过审`,
+          severity: 'error',
+        });
       }
 
       return issues;
